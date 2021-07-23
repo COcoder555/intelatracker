@@ -1,19 +1,7 @@
 const inquirer = require("inquirer");
-const connect = require("./db/connection");
-const util = require('util');
-const { type } = require("os");
-const { listenerCount } = require("events");
-const { getUnpackedSettings } = require("http2");
+const connection = require("./db/connection");
+console.log(`Welcome to Intelatracker ${connection.threadId}\n`);
 
-
-
-connect.connect(async (err) => {
-  if (err) throw err;
-  console.log(`Welcome to Intelatracker ${connection.threadId}\n`);
-  firstQuestion();
-});
-
-connect.query = util.promisify(connect.query);
 const firstQuestion = async () => {
   try {
     const { userOption } = await inquirer.prompt([
@@ -22,9 +10,9 @@ const firstQuestion = async () => {
         type: 'list',
         message: 'What would you like to do?',
         choices: [
-          'View all Emloyees',
-          'View Employees by Department',
-          'View Employees by Role',
+          'View all Employees',
+          'View Departments',
+          'View Roles',
           'Add Employee',
           'Add Role',
           'Add Department',
@@ -43,13 +31,13 @@ const firstQuestion = async () => {
 
 const userChoice = (userOption) => {
   switch (userOption) {
-    case 'View all Employees':
-      getAllEMP();
+    case 'View all Employees': 
+       getAllEMP();
       break;
-    case 'View all Employees by Department':
+    case 'View Departments':
       getALLDep();
       break;
-    case 'View all Emplowyees by Role':
+    case 'View Roles':
       getALLRole();
       break;
     case 'Add Employee':
@@ -61,7 +49,7 @@ const userChoice = (userOption) => {
     case 'Add Department':
       addDept();
       break;
-    case 'Update Emloyee Role':
+    case 'Update Employee':
       updateEMP();
       break;
   }
@@ -69,7 +57,7 @@ const userChoice = (userOption) => {
 
 const getAllEMP = async () => {
   try {
-    const employee = await connect.query('SELECT * FROM employee');
+    const employee = await connection.query('SELECT * FROM employee INNER JOIN role ON employee.role_id = role.id');
     console.table(employee);
     firstQuestion()
   } catch (err) {
@@ -79,8 +67,8 @@ const getAllEMP = async () => {
 
 const getALLDep = async () => {
   try {
-    const department = await connect.query('SELECT *FROM depatment');
-    conssole.table(department);
+    const department = await connection.query('SELECT * FROM department');
+    console.table(department);
     firstQuestion()
   } catch (err) {
     console.log(err);
@@ -89,7 +77,7 @@ const getALLDep = async () => {
 
 const getALLRole = async () => {
   try {
-    const role = await connect.query('SELECT * FROM role');
+    const role = await connection.query('SELECT * FROM role');
     console.table(role);
     firstQuestion()
   } catch (err) {
@@ -98,9 +86,8 @@ const getALLRole = async () => {
 };
 
 
-const addEMP = () => {
-  connect.query('SELECT title, id FROM role', async (err, posistions) => {
-    if (err) throw err;
+const addEMP = async() => {
+const post = await connection.query('SELECT title, id FROM role')
     try {
       const Useranswer = await inquirer.prompt([
         {
@@ -117,26 +104,24 @@ const addEMP = () => {
           name: 'role_id',
           message: "What is the employee's role?",
           type: 'list',
-          choices: positions.map(title => ({ name: title.title, value: title.id }))
+          choices: post.map(title => ({ name: title.title, value: title.id }))
 
         }
       ]);
-      const query = 'INSERT INTO employee(first_name,last_name,role_id,manager) VALUES(?,?,?,1)';
-      connect.query(query, [Useranswer.first_name, Useranswer.last_name, Useranswer.role_id], (err, result) => {
+      const query = 'INSERT INTO employee(first_name,last_name,role_id,manager_id) VALUES(?,?,?,1)';
+      connection.query(query, [Useranswer.first_name, Useranswer.last_name, Useranswer.role_id], (err, result) => {
         if (err) throw err;
         console.log('Employee succesfully added!', result);
         firstQuestion();
       });
     } catch (err) {
       console.log(err);
-      connect.end();
+      connection.end();
 
     }
-  });
-
 }
 const addRole = () => {
-  connect.query('SELECT title, id FROM role', async (err, roles) => {
+  connection.query('SELECT title, id FROM role', async (err, roles) => {
     if (err) throw err;
     try {
       const { title, salary, departmentID } = await inquirer.prompt([
@@ -161,14 +146,14 @@ const addRole = () => {
 
       ]);
       const query = 'INSERT INTO role(title,salary,department_id) VALUES(?,?,?)';
-      connect.query(query, [title, parseINT(salary), departmentID], (err, result) => {
+      connection.query(query, [title, salary, departmentID], (err, result) => {
         if (err) throw err;
         console.log('Succsessfully added new role!', result)
         firstQuestion();
       });
     } catch (err) {
       console.log(err)
-      connect.end();
+      connection.end();
     }
   });
 }
@@ -181,17 +166,17 @@ const addDept = async () => {
         type: 'input'
       }
     ]);
-    connect.query('INSERT INTO department(name) VALUES(?)', newDept.name);
+    connection.query('INSERT INTO department(name) VALUES(?)', newDept.name);
     console.log(`Succsessfully added new Department ${newDept.name}`);
     firstQuestion();
   } catch (err) {
     console.log(err);
-    connect.end();
+    connection.end();
   }
 }
 
 const updateEMP = async () => {
-  const Employees = await connect.query('SELECT first_name, last_name, id FROM employee')
+  const Employees = await connection.query('SELECT first_name, last_name, id FROM employee')
   try {
     const update = await inquirer.prompt([
       {
@@ -204,7 +189,7 @@ const updateEMP = async () => {
         name: "col",
         message: "What would you like to update?",
         type: 'list',
-        choices: ['First Name', 'Last Name', 'Role', 'Salary', 'Department']
+        choices: ['First Name', 'Last Name', 'Role','Department']
       }
     ]);
     switch (update.col) {
@@ -218,38 +203,27 @@ const updateEMP = async () => {
 
           }
         ]);
-        connect.query(`UPDATE employee SET first_name = ? WHERE id= ?`, [first_name, update.EMP]);
+        connection.query(`UPDATE employee SET first_name = ? WHERE id= ?`, [first_name, update.EMP]);
         break
       case "Last Name":
         const { last_name } = await inquirer.prompt([
           {
-            name: " last_name",
+            name: "last_name",
             type: "input",
-            message: " What would you like to update the Last Name to?"
+            message: "What would you like to update the Last Name to?"
           }
         ]);
-        connect.query(`UPDATE employee SET last_name =? WHERE id =?`, [last_name, update.EMP]);
+        connection.query(`UPDATE employee SET last_name =? WHERE id =?`, [last_name, update.EMP]);
         break
       case "Role":
         const { role } = await inquirer.prompt([
           {
-            name: "Role",
+            name: "role",
             type: 'input',
             message: "What would you like to update the Role to?"
           }
         ]);
-        connect.query(`UPDATE employee SET role = ? WHERE id =?`, [role, update.EMP])
-        break
-      case "Salary":
-        const {salary} = await inquirer.prompt([
-          {
-            name: "salary",
-            type:'input',
-            message:" What is the updated salary?"
-
-          }
-        ]);
-        connect.query(`UDATE employee SET salary =? WHERE id=?`,[salary,update.EMP])
+        connection.query(`UPDATE employee SET role_id = ? WHERE id =?`, [parseInt(role), update.EMP])
         break
       case "Department":
         const {department} = await inquirer.prompt([
@@ -260,7 +234,8 @@ const updateEMP = async () => {
              
           }
         ]);
-        
+        connection.query(`UPDATE employee SET salary = ? WHRER id =?`[department,update.EMP])
+
         break
     };
 
@@ -269,6 +244,10 @@ const updateEMP = async () => {
 
   } catch (err) {
     console.log(err);
-    connect.end();
+    connection.end();
   }
 }
+
+
+console.log(`Welcome to Intelatracker ${connection}\n`);
+firstQuestion();
